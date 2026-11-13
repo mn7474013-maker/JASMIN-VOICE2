@@ -25,8 +25,8 @@ h1{letter-spacing:5px;margin:12px 0 4px}
 .sub,.small{font-size:12px;color:#91a4c5}
 .card{
  background:linear-gradient(145deg,#182943dd,#101a2ddd);
- border:1px solid #34496a;
- border-radius:19px;padding:17px;margin:14px 0;
+ border:1px solid #34496a;border-radius:19px;
+ padding:17px;margin:14px 0;
  box-shadow:0 8px 25px #0004;
 }
 .row{display:flex;justify-content:space-between;align-items:center;gap:10px}
@@ -77,10 +77,7 @@ select{
 .on{background:#16c99a;color:#06251d}
 .off{background:#354762;color:white}
 .danger{background:#e64d71;color:white}
-#history{
- max-height:220px;overflow:auto;
- font-size:13px;line-height:1.7;
-}
+#history{max-height:220px;overflow:auto;font-size:13px;line-height:1.7}
 .entry{padding:8px 0;border-bottom:1px solid #34435c}
 footer{text-align:center;color:#7185a5;font-size:11px;padding:20px}
 </style>
@@ -95,7 +92,6 @@ footer{text-align:center;color:#7185a5;font-size:11px;padding:20px}
  <div class="sub">SMART INDUSTRIAL LOAD ASSISTANT</div>
 </header>
 
-<!-- SETTINGS -->
 <div class="card">
  <div class="row">
   <div>
@@ -110,7 +106,6 @@ footer{text-align:center;color:#7185a5;font-size:11px;padding:20px}
  <div class="status" id="status">● Connecting...</div>
 </div>
 
-<!-- VOICE ASSISTANT -->
 <div class="card micbox">
  <div class="small">JASMIN VOICE ASSISTANT</div>
  <br>
@@ -121,7 +116,6 @@ footer{text-align:center;color:#7185a5;font-size:11px;padding:20px}
  <p class="small">Continuous listening mode. Keep this page open.</p>
 </div>
 
-<!-- MONITORING -->
 <div class="card">
  <div class="row">
   <strong>Electrical monitoring</strong>
@@ -148,39 +142,20 @@ footer{text-align:center;color:#7185a5;font-size:11px;padding:20px}
  </div>
 </div>
 
-<!-- MANUAL LOAD CONTROL -->
 <div class="card">
  <strong>Load control</strong>
  <div class="small">Five independent DC loads</div>
 
- <div class="load">
-  <span>💡 Lamp 1</span>
-  <button id="b0" class="off">OFF</button>
- </div>
- <div class="load">
-  <span>💡 Lamp 2</span>
-  <button id="b1" class="off">OFF</button>
- </div>
- <div class="load">
-  <span>⚙️ Geared Motor</span>
-  <button id="b2" class="off">OFF</button>
- </div>
- <div class="load">
-  <span>🌀 Cooler Fan</span>
-  <button id="b3" class="off">OFF</button>
- </div>
- <div class="load">
-  <span>💧 Water Pump</span>
-  <button id="b4" class="off">OFF</button>
- </div>
+ <div class="load"><span>💡 Lamp 1</span><button id="b0" class="off">OFF</button></div>
+ <div class="load"><span>💡 Lamp 2</span><button id="b1" class="off">OFF</button></div>
+ <div class="load"><span>⚙️ Geared Motor</span><button id="b2" class="off">OFF</button></div>
+ <div class="load"><span>🌀 Cooler Fan</span><button id="b3" class="off">OFF</button></div>
+ <div class="load"><span>💧 Water Pump</span><button id="b4" class="off">OFF</button></div>
 
  <br>
- <button class="action danger full" id="allOff">
-  TURN OFF ALL LOADS
- </button>
+ <button class="action danger full" id="allOff">TURN OFF ALL LOADS</button>
 </div>
 
-<!-- CONVERSATION -->
 <div class="card">
  <div class="row">
   <strong>Assistant conversation</strong>
@@ -193,20 +168,16 @@ footer{text-align:center;color:#7185a5;font-size:11px;padding:20px}
  JASMIN • ESP32 • INA219 • BLYNK<br>
  Smart Industrial Load Management
 </footer>
-
 </div>
 
 <script>
 
-/********************************************************
- CONFIGURATION
- USE THE SAME URL AND API KEY FROM YOUR PREVIOUS PAGE
-********************************************************/
+/* KEEP YOUR EXISTING APPS SCRIPT DETAILS */
 
 const API_URL = "https://script.google.com/macros/s/AKfycbwmWYdnbX6yFl1Rq9288stSXqpV48KVkJEt6bPxyoWoois54UuXdOpNgf7gJ7vfVO1f/exec";
 const API_KEY = "Kayum786";
 
-const names = {
+const names={
  V0:"Lamp 1",
  V1:"Lamp 2",
  V2:"Geared Motor",
@@ -218,6 +189,8 @@ let states={V0:0,V1:0,V2:0,V3:0,V4:0};
 let busy=false;
 let recognition=null;
 let listening=false;
+let speaking=false;
+let processingVoice=false;
 let restartTimer=null;
 let refreshBusy=false;
 let lastCommandTime=0;
@@ -225,9 +198,7 @@ let lastCommandTime=0;
 const $=id=>document.getElementById(id);
 
 
-/********************************************************
- STATUS AND HISTORY
-********************************************************/
+/* STATUS AND HISTORY */
 
 function setStatus(message,good=true){
  $("status").textContent="● "+message;
@@ -248,29 +219,68 @@ function addHistory(who,message){
  $("history").prepend(div);
 }
 
+
+/* VOICE RESPONSE AND MICROPHONE PAUSE */
+
+function scheduleRestart(){
+ if(!listening||speaking||processingVoice)return;
+
+ clearTimeout(restartTimer);
+
+ restartTimer=setTimeout(()=>{
+  if(listening&&!speaking&&!processingVoice){
+   startRecognitionSession();
+  }
+ },500);
+}
+
 function say(message){
  $("reply").textContent=message;
  addHistory("JASMIN",message);
 
- if("speechSynthesis" in window){
-  speechSynthesis.cancel();
-
-  const utterance=new SpeechSynthesisUtterance(message);
-  utterance.lang=$("language").value;
-  utterance.rate=1;
-  speechSynthesis.speak(utterance);
+ if(!("speechSynthesis" in window)){
+  scheduleRestart();
+  return;
  }
+
+ speaking=true;
+
+ if(recognition){
+  try{recognition.abort();}catch(e){}
+ }
+
+ speechSynthesis.cancel();
+
+ const utterance=new SpeechSynthesisUtterance(message);
+ utterance.lang=$("language").value;
+ utterance.rate=1.05;
+ utterance.pitch=1;
+
+ let finished=false;
+
+ function finishSpeaking(){
+  if(finished)return;
+  finished=true;
+  speaking=false;
+  scheduleRestart();
+ }
+
+ utterance.onend=finishSpeaking;
+ utterance.onerror=finishSpeaking;
+
+ speechSynthesis.speak(utterance);
+
+ // Safety fallback if the browser fails to fire speech events.
+ setTimeout(finishSpeaking,Math.max(500,message.length*110));
 }
 
 
-/********************************************************
- SERVER CONNECTION USING JSONP
-********************************************************/
+/* SERVER CONNECTION */
 
 function callServer(params){
  return new Promise((resolve,reject)=>{
 
-  if(!API_URL.startsWith("https://script.google.com/") ||
+  if(!API_URL.startsWith("https://script.google.com/")||
      !API_URL.includes("/exec")){
    reject(new Error("Check Apps Script URL."));
    return;
@@ -292,7 +302,7 @@ function callServer(params){
    completed=true;
    cleanup();
    reject(new Error("Server timeout."));
-  },20000);
+  },12000);
 
   window[callback]=data=>{
    if(completed)return;
@@ -300,8 +310,8 @@ function callServer(params){
    clearTimeout(timer);
    cleanup();
 
-   if(!data || !data.ok){
-    reject(new Error(data?.error || "Request failed."));
+   if(!data||!data.ok){
+    reject(new Error(data?.error||"Request failed."));
    }else{
     resolve(data);
    }
@@ -328,9 +338,7 @@ function callServer(params){
 }
 
 
-/********************************************************
- RENDER LOAD BUTTON
-********************************************************/
+/* LOAD BUTTONS */
 
 function renderLoad(pin,state){
  states[pin]=Number(state);
@@ -343,15 +351,13 @@ function renderLoad(pin,state){
 }
 
 
-/********************************************************
- MANUAL LOAD CONTROL
-********************************************************/
+/* MANUAL AND VOICE LOAD CONTROL */
 
 async function controlLoad(pin,state){
- if(busy)return;
+ if(busy)return false;
 
  busy=true;
- setStatus("Sending command...",true);
+ setStatus("Sending command...");
 
  try{
   await callServer({
@@ -362,22 +368,24 @@ async function controlLoad(pin,state){
 
   renderLoad(pin,state);
 
-  const message=names[pin]+
-   (state?" switched ON.":" switched OFF.");
+  say(names[pin]+
+   (state?" switched ON.":" switched OFF."));
 
-  say(message);
-  setStatus("Command successful",true);
+  setStatus("Command successful");
+  return true;
 
  }catch(error){
-  say("Command failed. "+error.message);
   setStatus(error.message,false);
+  say("Unable to control "+names[pin]+".");
+  return false;
+
  }finally{
   busy=false;
  }
 }
 
 async function allOff(){
- if(busy)return;
+ if(busy)return false;
 
  busy=true;
  setStatus("Switching off all loads...");
@@ -388,20 +396,21 @@ async function allOff(){
   Object.keys(states).forEach(pin=>renderLoad(pin,0));
 
   say("All five loads are switched off.");
-  setStatus("All loads OFF",true);
+  setStatus("All loads OFF");
+  return true;
 
  }catch(error){
-  say("Unable to switch off all loads.");
   setStatus(error.message,false);
+  say("Unable to switch off all loads.");
+  return false;
+
  }finally{
   busy=false;
  }
 }
 
 
-/********************************************************
- MANUAL BUTTON EVENTS
-********************************************************/
+/* MANUAL BUTTON EVENTS */
 
 Object.keys(states).forEach(pin=>{
  const index=Number(pin.substring(1));
@@ -414,9 +423,7 @@ Object.keys(states).forEach(pin=>{
 $("allOff").addEventListener("click",allOff);
 
 
-/********************************************************
- LIVE ELECTRICAL MONITORING
-********************************************************/
+/* ELECTRICAL MONITORING */
 
 function numberValue(value){
  const n=Number(value);
@@ -424,7 +431,7 @@ function numberValue(value){
 }
 
 async function refreshData(){
- if(refreshBusy)return;
+ if(refreshBusy)return null;
 
  refreshBusy=true;
 
@@ -457,238 +464,397 @@ async function refreshData(){
    "Updated "+new Date().toLocaleTimeString();
 
   setStatus("Connected to Blynk",true);
+  return v;
 
  }catch(error){
   setStatus("Monitoring connection error",false);
+  return null;
+
  }finally{
   refreshBusy=false;
  }
 }
 
 
-/********************************************************
- VOICE COMMAND DATABASE
-********************************************************/
-
-const commands=[
- {
-  pin:"V0",name:"Lamp 1",
-  on:[
-   "lamp 1 on","lamp one on","turn on lamp 1",
-   "turn on lamp one","first lamp on","first light on",
-   "switch on lamp one","light one on",
-   "पहला लैंप चालू","पहला लैंप चालू करो",
-   "पहली लाइट चालू","पहली लाइट जला दो",
-   "पहला बल्ब जलाओ","लाइट नंबर एक चालू",
-   "लैंप एक चालू","पहली लाइट ऑन"
-  ],
-  off:[
-   "lamp 1 off","lamp one off","turn off lamp 1",
-   "turn off lamp one","first lamp off","first light off",
-   "switch off lamp one","light one off",
-   "पहला लैंप बंद","पहला लैंप बंद करो",
-   "पहली लाइट बंद","पहली लाइट बुझा दो",
-   "पहला बल्ब बुझाओ","लैंप एक बंद"
-  ]
- },
- {
-  pin:"V1",name:"Lamp 2",
-  on:[
-   "lamp 2 on","lamp two on","turn on lamp 2",
-   "turn on lamp two","second lamp on","second light on",
-   "switch on lamp two","light two on",
-   "दूसरा लैंप चालू","दूसरा लैंप चालू करो",
-   "दूसरी लाइट चालू","दूसरी लाइट जला दो",
-   "दूसरा बल्ब जलाओ","लैंप दो चालू"
-  ],
-  off:[
-   "lamp 2 off","lamp two off","turn off lamp 2",
-   "turn off lamp two","second lamp off","second light off",
-   "switch off lamp two","light two off",
-   "दूसरा लैंप बंद","दूसरा लैंप बंद करो",
-   "दूसरी लाइट बंद","दूसरी लाइट बुझा दो",
-   "दूसरा बल्ब बुझाओ","लैंप दो बंद"
-  ]
- },
- {
-  pin:"V2",name:"Geared Motor",
-  on:[
-   "motor on","turn on motor","start motor",
-   "start the motor","switch on motor",
-   "मोटर चालू","मोटर चालू करो","मोटर चलाओ",
-   "मोटर स्टार्ट करो"
-  ],
-  off:[
-   "motor off","turn off motor","stop motor",
-   "stop the motor","switch off motor",
-   "मोटर बंद","मोटर बंद करो","मोटर रोक दो",
-   "मोटर रोक दो"
-  ]
- },
- {
-  pin:"V3",name:"Cooler Fan",
-  on:[
-   "fan on","turn on fan","cooler on",
-   "turn on cooler","start fan","switch on fan",
-   "पंखा चालू","पंखा चालू करो","कूलर चालू",
-   "कूलर चालू करो","फैन चालू"
-  ],
-  off:[
-   "fan off","turn off fan","cooler off",
-   "turn off cooler","stop fan","switch off fan",
-   "पंखा बंद","पंखा बंद करो","कूलर बंद",
-   "कूलर बंद करो","फैन बंद"
-  ]
- },
- {
-  pin:"V4",name:"Water Pump",
-  on:[
-   "pump on","turn on pump","water pump on",
-   "turn on water pump","start pump","switch on pump",
-   "पंप चालू","पंप चालू करो","पानी का पंप चालू",
-   "पानी का मोटर चालू करो"
-  ],
-  off:[
-   "pump off","turn off pump","water pump off",
-   "turn off water pump","stop pump","switch off pump",
-   "पंप बंद","पंप बंद करो","पानी का पंप बंद",
-   "पंप रोक दो"
-  ]
- }
-];
-
-
-/********************************************************
- NORMALIZE TEXT
-********************************************************/
+/* TEXT NORMALIZATION */
 
 function normalize(text){
  return String(text).toLowerCase()
-  .replace(/[.,!?।]/g," ")
+  .normalize("NFC")
+  .replace(/[.,!?।;:]/g," ")
   .replace(/\s+/g," ")
   .trim();
 }
 
 function includesAny(text,phrases){
- return phrases.some(phrase=>text.includes(phrase));
+ return phrases.some(word=>text.includes(word));
+}
+
+function hasWord(text,word){
+ return new RegExp("(^|\\s)"+word+"($|\\s)","i").test(text);
 }
 
 
-/********************************************************
- VOICE COMMAND PROCESSOR
-********************************************************/
+/* GREETING AND CONVERSATION */
 
-async function processCommand(raw){
- const t=normalize(raw);
+function conversationIntent(t){
 
- $("heard").textContent="You said: "+raw;
- addHistory("YOU",raw);
+ if(includesAny(t,[
+  "who are you","what are you","your identity",
+  "तुम कौन हो","आप कौन हो","तुम्हारा परिचय",
+  "अपना परिचय"
+ ])){
+  return "identity";
+ }
 
- const allOffPhrases=[
-  "turn off all","switch off all","all off",
-  "all loads off","turn everything off",
-  "सब बंद","सभी बंद","सब कुछ बंद",
-  "सारे बंद","सभी लोड बंद","सभी लोड बंद करो",
-  "सब कुछ बंद करो"
+ if(includesAny(t,[
+  "how are you","how are you doing",
+  "कैसे हो","कैसी हो","कैसा चल रहा है"
+ ])){
+  return "how";
+ }
+
+ if(includesAny(t,[
+  "what can you do","what can you control",
+  "help","क्या कर सकती हो","क्या कर सकते हो",
+  "क्या क्या कर सकती","मदद"
+ ])){
+  return "help";
+ }
+
+ if(includesAny(t,[
+  "thank you","thanks","धन्यवाद","शुक्रिया"
+ ])){
+  return "thanks";
+ }
+
+ if(includesAny(t,[
+  "hello","hi jasmin","hey jasmin",
+  "हेलो","नमस्ते","नमस्कार","हाय","हेलो जैस्मिन"
+ ])||hasWord(t,"hi")){
+  return "greeting";
+ }
+
+ return null;
+}
+
+
+/* RECOGNIZE ELECTRICAL READINGS */
+
+function readingIntent(t){
+
+ if(includesAny(t,[
+  "voltage","volt","वोल्टेज","वोल्ट",
+  "बैटरी वोल्टेज"
+ ]))return "voltage";
+
+ if(includesAny(t,[
+  "current","ampere","amps","amp",
+  "करंट","धारा","एम्पियर"
+ ]))return "current";
+
+ if(includesAny(t,[
+  "power","watt","watts","वाट","पावर",
+  "कितनी बिजली"
+ ]))return "power";
+
+ if(includesAny(t,[
+  "energy","consumption","units",
+  "ऊर्जा","एनर्जी","खपत","यूनिट"
+ ]))return "energy";
+
+ return null;
+}
+
+
+/* RECOGNIZE LOAD NAME */
+
+function identifyLoad(t){
+
+ // Lamp 1
+ if(includesAny(t,[
+  "lamp 1","lamp one","lamp number one",
+  "first lamp","first light","light one",
+  "bulb one","light number one",
+  "पहला लैंप","पहली लाइट","पहला बल्ब",
+  "लैंप एक","लाइट एक","पहली लैम्प",
+  "पहला लैप","पहली लैंप"
+ ]))return "V0";
+
+ // Lamp 2
+ if(includesAny(t,[
+  "lamp 2","lamp two","lamp number two",
+  "second lamp","second light","light two",
+  "bulb two","light number two",
+  "दूसरा लैंप","दूसरी लाइट","दूसरा बल्ब",
+  "लैंप दो","लाइट दो","दूसरी लैम्प"
+ ]))return "V1";
+
+ // Motor
+ if(includesAny(t,[
+  "geared motor","gear motor","motor",
+  "मोटर","मोटर का"
+ ]))return "V2";
+
+ // Fan
+ if(includesAny(t,[
+  "cooler fan","cooler","fan",
+  "पंखा","कूलर","फैन"
+ ]))return "V3";
+
+ // Pump
+ if(includesAny(t,[
+  "water pump","pump","पंप","पम्प",
+  "पानी का पंप","पानी का मोटर"
+ ]))return "V4";
+
+ return null;
+}
+
+
+/* RECOGNIZE ON AND OFF ACTION */
+
+function identifyAction(t){
+
+ const onWords=[
+  "turn on","switch on","power on",
+  "start","start the"," on",
+  "चालू","चालु","चला दो","चलाओ",
+  "जला दो","जलाओ","ऑन","आन",
+  "स्टार्ट","खोल दो"
  ];
 
- if(includesAny(t,allOffPhrases)){
+ const offWords=[
+  "turn off","switch off","power off",
+  "stop","stop the"," off",
+  "बंद","बन्द","बुझाओ","बुझा दो",
+  "रोक दो","रोक","ऑफ","बंद करो"
+ ];
+
+ const on=includesAny(t,onWords);
+ const off=includesAny(t,offWords);
+
+ if(on===off)return null;
+
+ return on?1:0;
+}
+
+
+/* COMMAND IDENTIFICATION */
+
+function identifyCommand(raw){
+
+ const t=normalize(raw);
+
+ // All loads OFF
+ if(includesAny(t,[
+  "turn off all","switch off all",
+  "all loads off","all off",
+  "turn everything off","shut everything down",
+  "सब बंद","सभी बंद","सब कुछ बंद",
+  "सारे बंद","सभी लोड बंद",
+  "सभी लोड बंद करो","सब कुछ बंद करो",
+  "सबको बंद करो"
+ ])){
+  return {type:"allOff"};
+ }
+
+ // Conversation
+ const conversation=conversationIntent(t);
+ if(conversation){
+  return {type:"conversation",intent:conversation};
+ }
+
+ // Electrical readings
+ const reading=readingIntent(t);
+ if(reading){
+  return {type:"reading",reading};
+ }
+
+ // System status
+ if(includesAny(t,[
+  "system status","load status","status",
+  "कौन चालू है","कौन बंद है",
+  "लोड की स्थिति","सिस्टम की स्थिति",
+  "स्थिति बताओ","स्टेटस बताओ"
+ ])){
+  return {type:"status"};
+ }
+
+ // Individual load
+ const pin=identifyLoad(t);
+ const action=identifyAction(t);
+
+ if(pin!==null&&action!==null){
+  return {type:"load",pin,state:action};
+ }
+
+ return null;
+}
+
+
+/* ANSWER ELECTRICAL QUESTIONS */
+
+async function answerReading(type){
+
+ const values=await refreshData();
+
+ if(!values){
+  say("Unable to read electrical data.");
+  return;
+ }
+
+ const display={
+  voltage:$("voltage").textContent,
+  current:$("current").textContent,
+  power:$("power").textContent,
+  energy:$("energy").textContent
+ };
+
+ const hindi=$("language").value==="hi-IN";
+
+ const messages={
+  voltage:hindi?
+   "वर्तमान वोल्टेज "+display.voltage:
+   "The present voltage is "+display.voltage,
+
+  current:hindi?
+   "वर्तमान करंट "+display.current:
+   "The present current is "+display.current,
+
+  power:hindi?
+   "कुल पावर "+display.power:
+   "The total power is "+display.power,
+
+  energy:hindi?
+   "कुल ऊर्जा खपत "+display.energy:
+   "The total energy consumption is "+display.energy
+ };
+
+ say(messages[type]);
+}
+
+
+/* SYSTEM STATUS */
+
+async function answerStatus(){
+
+ const values=await refreshData();
+
+ if(!values){
+  say("Unable to check system status.");
+  return;
+ }
+
+ const active=Object.keys(states)
+  .filter(pin=>states[pin])
+  .map(pin=>names[pin]);
+
+ if(active.length){
+  say("Currently ON: "+active.join(", "));
+ }else{
+  say("All five loads are switched off.");
+ }
+}
+
+
+/* PROCESS RECOGNIZED COMMAND */
+
+async function executeIntent(intent){
+
+ if(!intent)return;
+
+ if(intent.type==="conversation"){
+
+  const hindi=$("language").value==="hi-IN";
+
+  const responses={
+   greeting:hindi?
+    "नमस्ते! मैं जैस्मिन हूँ। बताइए, मैं आपकी क्या मदद कर सकती हूँ?":
+    "Hello! I am Jasmin. How can I help you?",
+
+   identity:hindi?
+    "मैं जैस्मिन हूँ, आपका स्मार्ट इंडस्ट्रियल लोड असिस्टेंट।":
+    "I am Jasmin, your smart industrial load assistant.",
+
+   how:hindi?
+    "मैं बिल्कुल ठीक हूँ। आपकी मदद के लिए तैयार हूँ।":
+    "I am working perfectly. I am ready to help you.",
+
+   help:hindi?
+    "मैं पांचों लोड नियंत्रित कर सकती हूँ और वोल्टेज, करंट, पावर तथा ऊर्जा की जानकारी दे सकती हूँ।":
+    "I can control five loads and monitor voltage, current, power and energy.",
+
+   thanks:hindi?
+    "आपका स्वागत है।":
+    "You are welcome!"
+  };
+
+  say(responses[intent.intent]);
+  return;
+ }
+
+ if(intent.type==="allOff"){
   await allOff();
   return;
  }
 
- for(const item of commands){
-  const on=includesAny(t,item.on);
-  const off=includesAny(t,item.off);
-
-  if(on||off){
-   await controlLoad(item.pin,on?1:0);
-   return;
-  }
- }
-
- // Electrical monitoring questions
- if(includesAny(t,["voltage","volt","वोल्टेज","वोल्ट"])){
-  await refreshData();
-  say("The voltage is "+$("voltage").textContent);
+ if(intent.type==="load"){
+  await controlLoad(intent.pin,intent.state);
   return;
  }
 
- if(includesAny(t,["current","ampere","amps","करंट","धारा"])){
-  await refreshData();
-  say("The current is "+$("current").textContent);
+ if(intent.type==="reading"){
+  await answerReading(intent.reading);
   return;
  }
 
- if(includesAny(t,["power","वाट","पावर"])){
-  await refreshData();
-  say("The total power is "+$("power").textContent);
+ if(intent.type==="status"){
+  await answerStatus();
   return;
  }
-
- if(includesAny(t,["energy","consumption","ऊर्जा","खपत"])){
-  await refreshData();
-  say("The energy consumption is "+$("energy").textContent);
-  return;
- }
-
- if(includesAny(t,["status","स्थिति","कौन चालू","कौन बंद"])){
-  await refreshData();
-
-  const active=Object.keys(states)
-   .filter(pin=>states[pin])
-   .map(pin=>names[pin]);
-
-  say(active.length?
-   "Active loads are "+active.join(", "):
-   "All five loads are switched off.");
-
-  return;
- }
-
- // Conversational responses
- if(includesAny(t,["hello","hi jasmin","hey jasmin","हेलो","नमस्ते","हाय"])){
-  say("Hello! I am Jasmin, your industrial load assistant. How can I help you?");
-  return;
- }
-
- if(includesAny(t,["how are you","कैसी हो","कैसे हो"])){
-  say("I am working perfectly. Thank you for asking!");
-  return;
- }
-
- if(includesAny(t,["what can you do","help","क्या कर सकती","क्या कर सकते"])){
-  say("I can control five loads, monitor voltage, current, power and energy, and report system status.");
-  return;
- }
-
- if(includesAny(t,["thank you","thanks","धन्यवाद","शुक्रिया"])){
-  say("You are welcome! I am always ready to help.");
-  return;
- }
-
- if(includesAny(t,["your name","तुम्हारा नाम"])){
-  say("My name is Jasmin, your smart industrial load assistant.");
-  return;
- }
-
- say("Sorry, I did not understand. You can ask me to control a load or check electrical readings.");
 }
 
 
-/********************************************************
- CONTINUOUS SPEECH RECOGNITION
-********************************************************/
+/* VOICE COMMAND PROCESSOR */
+
+async function processCommand(raw,alternatives=[]){
+
+ $("heard").textContent="You said: "+raw;
+
+ addHistory("YOU",raw);
+
+ // Try the best transcript and available alternatives.
+ const candidates=[raw,...alternatives];
+
+ let intent=null;
+
+ for(const candidate of candidates){
+  intent=identifyCommand(candidate);
+  if(intent)break;
+ }
+
+ // Unknown commands stay silent.
+ if(!intent){
+  $("reply").textContent="";
+  return;
+ }
+
+ await executeIntent(intent);
+}
+
+
+/* CONTINUOUS SPEECH RECOGNITION */
 
 function startListening(){
 
  const SpeechRecognition=
-  window.SpeechRecognition ||
+  window.SpeechRecognition||
   window.webkitSpeechRecognition;
 
  if(!SpeechRecognition){
-  setStatus("Speech recognition unsupported in this browser",false);
-  say("Please use the latest Chrome browser.");
+  setStatus("Speech recognition unsupported",false);
+  $("heard").textContent="Please use Google Chrome.";
   return;
  }
 
@@ -696,134 +862,112 @@ function startListening(){
 
  listening=true;
  $("mic").classList.add("active");
- setStatus("Voice assistant is listening",true);
+ setStatus("JASMIN is listening",true);
 
- startRecognitionSession(SpeechRecognition);
+ startRecognitionSession();
 }
 
-function startRecognitionSession(SpeechRecognition){
- if(!listening)return;
+
+function startRecognitionSession(){
+
+ if(!listening||speaking||processingVoice)return;
+
+ const SpeechRecognition=
+  window.SpeechRecognition||
+  window.webkitSpeechRecognition;
+
+ if(!SpeechRecognition)return;
 
  recognition=new SpeechRecognition();
 
  recognition.lang=$("language").value;
  recognition.continuous=false;
  recognition.interimResults=false;
- recognition.maxAlternatives=3;
+ recognition.maxAlternatives=5;
 
  recognition.onstart=()=>{
-  $("heard").textContent="Listening... Speak now.";
- };
-
- recognition.onresult=async event=>{
-  const transcript=event.results[0][0].transcript;
-
-  const now=Date.now();
-  if(now-lastCommandTime<1200)return;
-  lastCommandTime=now;
-
-  try{
-   await processCommand(transcript);
-  }catch(error){
-   setStatus(error.message,false);
-   say("There was a problem executing your command.");
+  if(!speaking){
+   $("heard").textContent="Listening... Speak now.";
   }
  };
 
+ recognition.onresult=async event=>{
+
+  const result=event.results[0];
+
+  const transcript=result[0].transcript;
+
+  const alternatives=[];
+
+  for(let i=1;i<result.length;i++){
+   alternatives.push(result[i].transcript);
+  }
+
+  const now=Date.now();
+
+  if(now-lastCommandTime<900)return;
+
+  lastCommandTime=now;
+  processingVoice=true;
+
+  try{
+   await processCommand(transcript,alternatives);
+  }catch(error){
+   setStatus(error.message,false);
+   say("There was a problem executing your command.");
+  }finally{
+   processingVoice=false;
+   scheduleRestart();
+  }
+ };
+
+
  recognition.onerror=event=>{
-  if(event.error==="not-allowed" ||
+
+  if(event.error==="not-allowed"||
      event.error==="service-not-allowed"){
+
    listening=false;
    $("mic").classList.remove("active");
-   setStatus("Microphone or speech recognition blocked",false);
+   setStatus("Microphone permission blocked",false);
    $("heard").textContent="Allow microphone permission and retry.";
+
   }else if(event.error==="network"){
-   setStatus("Speech recognition network error",false);
+
+   setStatus("Speech network error. Retrying...",false);
+
   }else if(event.error==="no-speech"){
-   $("heard").textContent="No speech detected. Listening again...";
+
+   $("heard").textContent="Listening...";
+
   }else if(event.error!=="aborted"){
+
    setStatus("Voice error: "+event.error,false);
   }
  };
 
+
  recognition.onend=()=>{
-  if(listening){
-   clearTimeout(restartTimer);
-   restartTimer=setTimeout(()=>{
-    if(listening){
-     startRecognitionSession(SpeechRecognition);
-    }
-   },350);
-  }else{
-   $("mic").classList.remove("active");
+  if(listening&&!speaking&&!processingVoice){
+   scheduleRestart();
   }
  };
+
 
  try{
   recognition.start();
  }catch(error){
-  if(listening){
-   restartTimer=setTimeout(()=>{
-    startRecognitionSession(SpeechRecognition);
-   },1000);
-  }
+  scheduleRestart();
  }
 }
 
+
+/* STOP LISTENING */
+
 function stopListening(){
+
  listening=false;
  clearTimeout(restartTimer);
 
  if(recognition){
-  try{recognition.stop();}catch(e){}
- }
-
- $("mic").classList.remove("active");
- setStatus("Voice assistant stopped",true);
- $("heard").textContent="Tap Start Listening to continue.";
-}
-
-
-/********************************************************
- TEST CONNECTION
-********************************************************/
-
-async function testConnection(){
- try{
-  setStatus("Testing Blynk connection...");
-  const result=await callServer({action:"ping"});
-  setStatus("Connected to Blynk. Voltage: "+result.voltage+" V");
-  say("Jasmin is connected to Blynk.");
- }catch(error){
-  setStatus(error.message,false);
- }
-}
-
-
-/********************************************************
- BUTTON EVENTS
-********************************************************/
-
-$("mic").addEventListener("click",startListening);
-$("micStop").addEventListener("click",stopListening);
-
-$("clearHistory").addEventListener("click",()=>{
- $("history").textContent="Conversation cleared.";
-});
-
-$("language").addEventListener("change",()=>{
- if(listening){
-  stopListening();
-  startListening();
- }
-});
-
-
-// Initial dashboard update and refresh
-refreshData();
-setInterval(refreshData,8000);
-testConnection();
-
-</script>
-</body>
-  </html>
+  try{recognition.abort()
